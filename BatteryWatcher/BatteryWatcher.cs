@@ -11,16 +11,90 @@ namespace BatteryWatcher
     {
 
         #region Globals
+
+        /// <summary>
+        /// notify icon for system tray
+        /// </summary>
         private readonly NotifyIcon _batteryWatcherIcon;
+
+        /// <summary>
+        /// background worker that monitors the battery
+        /// </summary>
         private readonly Thread _batteryWatcherBackgroundWorker;
-        private readonly Icon _iconPrimary;
-        private readonly Icon _iconDanger;
-        private readonly Icon _iconWarning;
-        private bool _disableUpperAlert;
-        private bool _disableLowerAlert;
-        private DateTime _upperAlertReEnableTime;
-        private DateTime _lowerAlertReEnableTime;
+
+        /// <summary>
+        /// enables default window close action if set to true.
+        /// </summary>
         private bool _forceClose;
+        #endregion
+
+        #region Properties and Fields
+        /// <summary>
+        /// primary icon for normal state
+        /// </summary>
+        private Icon _iconPrimary => new Icon(@".\Resources\Images\IconPrimary.ico");
+
+        /// <summary>
+        /// danger icon for low battery state
+        /// </summary>
+        private Icon _iconDanger => new Icon(@".\Resources\Images\IconDanger.ico");
+
+        /// <summary>
+        /// warning icon for high battery state
+        /// </summary>
+        private Icon _iconWarning => new Icon(@".\Resources\Images\IconWarning.ico");
+
+        /// <summary>
+        /// flag to disable upper alert
+        /// </summary>
+        private bool _disableUpperAlert;
+
+        public bool DisableUpperAlert
+        {
+            get { return _disableUpperAlert; }
+            set
+            {
+                _disableUpperAlert = value;
+
+                //if upper alert is disabler set re-enable timer
+                if (value)
+                {
+                    _upperAlertReEnableTime = DateTime.Now.AddMinutes(5);
+                }
+            }
+        }
+
+        /// <summary>
+        /// upper alert re-enable time
+        /// </summary>
+        private DateTime _upperAlertReEnableTime;
+
+
+        /// <summary>
+        /// flag to disable lower alert
+        /// </summary>
+        private bool _disableLowerAlert;
+
+        public bool DisableLowerAlert
+        {
+            get { return _disableLowerAlert; }
+            set
+            {
+                _disableLowerAlert = value;
+
+                //if lower alert is disabled set re-enable timer
+                if (value)
+                {
+                    _lowerAlertReEnableTime = DateTime.Now.AddMinutes(5);
+                }
+            }
+        }
+
+        /// <summary>
+        /// lower alert re-enable time
+        /// </summary>
+        private DateTime _lowerAlertReEnableTime;
+
         #endregion
 
         #region Constructor
@@ -28,11 +102,6 @@ namespace BatteryWatcher
         {
             this.Closing += BatteryWatcher_Closing;
             InitializeComponent();
-
-            //create Icons
-            _iconPrimary = new Icon(@".\Resources\Images\IconPrimary.ico");
-            _iconDanger = new Icon(@".\Resources\Images\IconDanger.ico");
-            _iconWarning = new Icon(@".\Resources\Images\IconWarning.ico");
 
             //create notifyIcon
             //assign assign Image and show it
@@ -65,12 +134,6 @@ namespace BatteryWatcher
             //add context menu to notify icon
             _batteryWatcherIcon.ContextMenu = contextMenu;
 
-            ////hide the window to minimized state
-            ////this is notification tray application
-            //this.WindowState = FormWindowState.Minimized;
-            ////remove from task bar 
-            //this.ShowInTaskbar = false;
-
             LowerLevelTrackBar.Maximum = 100;
             LowerLevelTrackBar.TickFrequency = 5;
             LowerLevelTrackBar.LargeChange = 5;
@@ -92,20 +155,6 @@ namespace BatteryWatcher
             //disable resizing of the window
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
         }
-
-        private void BatteryWatcher_Closing(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            //hide the window
-            this.WindowState = FormWindowState.Minimized;
-            //remove from task bar 
-            this.ShowInTaskbar = false;
-            //disable default close behaviour when force close is true
-            if (!_forceClose)
-            {
-                _forceClose = false;
-                e.Cancel = true;
-            }
-        }
         #endregion
 
         #region Event Handlers
@@ -124,16 +173,22 @@ namespace BatteryWatcher
         }
 
         /// <summary>
-        /// Hide window back to notification tray
+        /// changes default closing action depending on force close value
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void HideButton_Click(object sender, EventArgs e)
+        private void BatteryWatcher_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             //hide the window
             this.WindowState = FormWindowState.Minimized;
             //remove from task bar 
             this.ShowInTaskbar = false;
+            //disable default close behaviour when force close is true
+            if (!_forceClose)
+            {
+                _forceClose = false;
+                e.Cancel = true;
+            }
         }
 
         /// <summary>
@@ -245,25 +300,32 @@ namespace BatteryWatcher
                         int upperLevel = (int)this.Invoke(new Func<int>(() => UpperLevelTrackBar.Value));
                         int lowerLevel = (int)this.Invoke(new Func<int>(() => LowerLevelTrackBar.Value));
 
-
-                        if (batteryLevel >= upperLevel && !_disableUpperAlert)
+                        if (batteryLevel >= upperLevel && !DisableUpperAlert)
                         {
+                            //change notification tray icon to warning icon
                             _batteryWatcherIcon.Icon = _iconWarning;
+                            //play sound
                             soundPlayer.Play();
-                            DisableUpperAlert();
+                            //disable upper alert for default time
+                            DisableUpperAlert = true;
                         }
-                        else if (batteryLevel <= lowerLevel && !_disableLowerAlert)
+                        else if (batteryLevel <= lowerLevel && !DisableLowerAlert)
                         {
+                            //change notification tray icon to danger icon
                             _batteryWatcherIcon.Icon = _iconDanger;
+                            //play sound
                             soundPlayer.Play();
-                            DisableLowerAlert();
+                            //disable lower alert for default time
+                            DisableLowerAlert = true;
                         }
                         else if (batteryLevel > lowerLevel && batteryLevel < upperLevel)
                         {
+                            //change notification tray icon to primary icon
                             _batteryWatcherIcon.Icon = _iconPrimary;
                         }
                     }
 
+                    //check if alerts disable time has passed
                     CheckUpperAlertForReEnable();
                     CheckLowerAlertForReEnable();
 
@@ -272,7 +334,7 @@ namespace BatteryWatcher
             }
             catch (ThreadAbortException)
             {
-
+                //do nothing
             }
         }
 
@@ -303,35 +365,29 @@ namespace BatteryWatcher
             LowerLevelTextBox.Text = LowerLevelTrackBar.Value.ToString();
         }
 
-        private void DisableUpperAlert()
-        {
-            _disableUpperAlert = true;
-            _upperAlertReEnableTime = DateTime.Now.AddMinutes(5);
-        }
-
-        private void DisableLowerAlert()
-        {
-            _disableLowerAlert = true;
-            _lowerAlertReEnableTime = DateTime.Now.AddMinutes(5);
-        }
-
+        /// <summary>
+        /// check if upper alert re-enable time as passed. Enable if so.
+        /// </summary>
         private void CheckUpperAlertForReEnable()
         {
-            _disableUpperAlert = !(_disableUpperAlert && DateTime.Now >= _upperAlertReEnableTime);
-        }
-
-        private void CheckLowerAlertForReEnable()
-        {
-            _disableLowerAlert = !(_disableLowerAlert && DateTime.Now >= _lowerAlertReEnableTime);
+            DisableUpperAlert = !(DisableUpperAlert && DateTime.Now >= _upperAlertReEnableTime);
         }
 
         /// <summary>
-        /// re-enables alert tone 
+        /// check if lower alert re-enable time as passed. Enable if so.
+        /// </summary>
+        private void CheckLowerAlertForReEnable()
+        {
+            DisableLowerAlert = !(DisableLowerAlert && DateTime.Now >= _lowerAlertReEnableTime);
+        }
+
+        /// <summary>
+        /// re-enables alert tone when track bar value is changed
         /// </summary>
         private void ReEnableAlert()
         {
-            _disableUpperAlert = false;
-            _disableLowerAlert = false;
+            DisableUpperAlert = false;
+            DisableLowerAlert = false;
         }
         #endregion
     }
